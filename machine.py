@@ -1,73 +1,67 @@
 import json
-import re
+from ticket import Ticket
+from cart import Cart
+from payment import PaymentProcessor
 
-with open("prices.json", "r", encoding="UTF-8") as jf:
-    prices = json.load(jf)
+class TicketSelector:
+    def __init__(self, price_file):
+        with open(price_file, "r", encoding="utf-8") as f:
+            self.prices = json.load(f)
 
-def display_menu(menu):
-    print("Jaką opcję biletu chcesz kupić? ")
-    options = list(menu.keys())
-    for index, option in enumerate(options):
-        print(f"{index} - {option}")
-    try:
-        choice = int(input("Wybór: "))
-    except ValueError:
-        print("Wprowaadzono niepoprawny typ wartości.")
-        return display_menu(menu)
-    if choice > len(options)-1 or choice < 0:
-        print("Wprowadzono błędny numer opcji.")
-        return display_menu(menu)
-    menu = menu[options[choice]]
-    if isinstance(menu ,dict):
-        return display_menu(menu)
-    else:
-        return (option, menu)
+    def display_menu(self, menu=None, path=None):
+        if menu is None:
+            menu = self.prices
+            path = []
 
-def register_payment(cart):
-    total = sum(price for _, price in cart)
-    print(f"Kwota do zapłąty: {total} zł")
-    payment_method = input("Wybierz metodę płatności: \nb - BLIK \nk- karta\ng - gotówka\n")
-    if payment_method.lower()=='b':
-        blik = input("Podaj kod BLIK: ")
-        if re.search(r"^[0-9]{6}$", blik):
-            print("Transakcja się powiodła")
+        options = list(menu.keys())
+        print("\nWybierz opcję:")
+        for i, option in enumerate(options):
+            print(f"{i} - {option}")
+
+        try:
+            choice = int(input("Wybór: "))
+            if choice < 0 or choice >= len(options):
+                raise ValueError
+        except ValueError:
+            print("Nieprawidłowy wybór.")
+            return self.display_menu(menu, path)
+
+        selected_key = options[choice]
+        selected_value = menu[selected_key]
+        path.append(selected_key)
+
+        if isinstance(selected_value, dict):
+            return self.display_menu(selected_value, path)
         else:
-            decision = input("Podano niepoprawny kod. Czy chcesz spróbować jeszcze raz (t/n)? ")
-            if decision.lower()=='t':
-                register_payment(cart)
-            else: exit()
-    elif payment_method.lower()=='k':
-        print("Proszę zbliżyć kartę do czytnika...")
-        input("Potwierdź transakcję: ")
-        print("Transakcja się powiodła")
-    elif payment_method.lower()=='g':
-        paid = 0
-        while paid < total:
-            try:
-                paid += float(input("Wprowadź gotówkę: "))
-            except ValueError:
-                paid += 0
-            if paid < total:
-                decision = input("Wprowadzono za mało gotówki. Czy chcesz dopłacić (t/n? )")
-                if decision.lower()=='t':
-                    continue
-                else: exit()
+            return Ticket(path[0], path[1], path[2], selected_value)
+
+def main():
+    selector = TicketSelector("prices.json")
+    cart = Cart()
+
+    while True:
+        ticket = selector.display_menu()
+        cart.add_ticket(ticket)
+        cont = input("Dodać kolejny bilet? (t/n): ").lower()
+        if cont != 't':
+            break
+
+    if cart.is_empty():
+        print("Koszyk jest pusty.")
+        return
+
+    cart.display_cart()
+
+    confirm = input("\nCzy chcesz przejść do płatności? (t/n): ").lower()
+    if confirm == 't':
+        processor = PaymentProcessor(cart.total())
+        processor.process_payment()
+
+        input("\nDrukowanie biletów...")
+        cart.display_cart()
+        print("Dziękujemy za zakup!")
     else:
-        decision = input("Wybrano niepoprawną opcję. Czy chcesz spróbować jeszcze raz (t/n)? ")
-        if decision.lower()=='t':
-            register_payment(cart)
-        else: exit()
+        print("Zakup anulowany.")
 
-def display_cart(cart):
-    for ticket, price in cart:
-        print(f"bilet {ticket}\t{price} zł")
-
-cart = []
-add_another = "t"
-while add_another.lower()=='t':
-    cart.append(display_menu(prices))
-    add_another = input("Czy chcesz dodać kolejny bilet (t/n)? ")
-register_payment(cart)
-input("Drukowanie biletów. Proszę czekać...")
-display_cart(cart)
-print("Dziękujemy za skorzystanie z automatu biletowego. Zapraszamy ponownie")
+if __name__ == "__main__":
+    main()
